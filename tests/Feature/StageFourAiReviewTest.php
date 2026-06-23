@@ -5,6 +5,7 @@ use App\Core\Shared\OpenAI\Contracts\VisionReviewClient;
 use App\Core\Shared\OpenAI\Data\VisionReviewRequest;
 use App\Core\Shared\OpenAI\Data\VisionReviewResponse;
 use App\Core\Shared\OpenAI\Services\OpenAiVisionReviewClient;
+use App\Modules\KpusGaHw\Application\Services\BuildKpusGaHwVisionReviewRequest;
 use App\Modules\KpusGaHw\Application\Services\RunAiReviewAudit;
 use App\Modules\KpusGaHw\Domain\Enums\AiReviewResult;
 use App\Modules\KpusGaHw\Domain\Enums\AuditStatus;
@@ -125,6 +126,22 @@ it('sends at most the first two ordered image URLs to AI', function (): void {
             'https://download.example.test/first',
             'https://download.example.test/second',
         ]);
+});
+
+it('tells AI that Hayam Wuruk is the expected site and area names are rooms inside it', function (): void {
+    $request = app(BuildKpusGaHwVisionReviewRequest::class)->handle([
+        'area_name' => 'Tomb',
+        'images' => [
+            ['download_url' => 'https://download.example.test/first'],
+            ['download_url' => 'https://download.example.test/second'],
+        ],
+    ], stageFourReportDate());
+
+    expect($request->developerPrompt)->toContain('Hayam Wuruk is the expected office/site location')
+        ->and($request->developerPrompt)->toContain('Tomb, Finance, Pantry, or BD are rooms/areas')
+        ->and($request->developerPrompt)->toContain('Do not mark evidence anomalous merely because the printed location contains Hayam Wuruk')
+        ->and($request->userPrompt)->toContain('room/area "Tomb" inside the Hayam Wuruk office/site')
+        ->and($request->userPrompt)->toContain('treat that as expected site evidence, not an anomaly by itself');
 });
 
 it('can prepare Basecamp image downloads as data URLs for OpenAI', function (): void {
