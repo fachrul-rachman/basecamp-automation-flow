@@ -10,6 +10,8 @@ Basecamp dated to-do list -> objective photo checks -> OpenAI vision review -> P
 
 Notion hanya output. PostgreSQL adalah source of truth.
 
+Notion rows include `Validator Status` and `Validator Notes` for SPV follow-up. `Baik` defaults to validator `Check`, while `Need Review` and `Bermasalah` default to validator `Uncheck`; validator notes are created empty.
+
 ## Requirements
 
 - PHP 8.3+

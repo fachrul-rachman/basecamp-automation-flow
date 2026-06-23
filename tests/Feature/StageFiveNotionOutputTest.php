@@ -67,18 +67,29 @@ it('builds the verified Notion create-page payload with data source parent and e
                     'name' => 'Baik',
                 ],
             ],
+            'Validator Status' => [
+                'status' => [
+                    'name' => 'Check',
+                ],
+            ],
+            'Validator Notes' => [
+                'rich_text' => [],
+            ],
         ],
     ]);
 });
 
-it('maps all final statuses exactly for Notion status property', function (AuditStatus $status): void {
+it('maps all final statuses exactly for Notion status property', function (AuditStatus $status, string $validatorStatus): void {
     $request = app(BuildKpusGaHwNotionPageRequest::class)->handle(stageFiveAudit(status: $status));
+    $properties = $request->toPayload()['properties'];
 
-    expect($request->toPayload()['properties']['Status']['status']['name'])->toBe($status->value);
+    expect($properties['Status']['status']['name'])->toBe($status->value)
+        ->and($properties['Validator Status']['status']['name'])->toBe($validatorStatus)
+        ->and($properties['Validator Notes']['rich_text'])->toBe([]);
 })->with([
-    'baik' => [AuditStatus::Baik],
-    'bermasalah' => [AuditStatus::Bermasalah],
-    'need review' => [AuditStatus::NeedReview],
+    'baik' => [AuditStatus::Baik, 'Check'],
+    'bermasalah' => [AuditStatus::Bermasalah, 'Uncheck'],
+    'need review' => [AuditStatus::NeedReview, 'Uncheck'],
 ]);
 
 it('stores Notion page ID and delivered status after successful delivery', function (): void {

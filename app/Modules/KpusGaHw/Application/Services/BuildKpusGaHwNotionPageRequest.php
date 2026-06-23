@@ -51,7 +51,23 @@ class BuildKpusGaHwNotionPageRequest
                         'name' => $status->value,
                     ],
                 ],
+                'Validator Status' => [
+                    'status' => [
+                        'name' => $this->validatorStatus($status),
+                    ],
+                ],
+                'Validator Notes' => [
+                    'rich_text' => [],
+                ],
             ],
         );
+    }
+
+    private function validatorStatus(AuditStatus $status): string
+    {
+        return match ($status) {
+            AuditStatus::Baik => 'Check',
+            AuditStatus::Bermasalah, AuditStatus::NeedReview => 'Uncheck',
+        };
     }
 }
