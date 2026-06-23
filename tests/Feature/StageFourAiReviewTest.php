@@ -99,7 +99,9 @@ it('does not call AI when objective checks fail', function (): void {
         ->and($audit->status)->toBe(AuditStatus::Bermasalah);
 });
 
-it('sends at most the first two ordered image URLs to AI', function (): void {
+it('sends at most the configured first four ordered image URLs to AI', function (): void {
+    config(['kpus-ga-hw.ai_max_images' => 4]);
+
     fakeStageFourBasecampResponses([
         stageFourTodoPayload(id: 1001, content: 'BD'),
     ], [
@@ -110,6 +112,8 @@ it('sends at most the first two ordered image URLs to AI', function (): void {
             ]),
             stageFourCommentPayload(id: 2, todoId: 1001, createdAt: '2026-06-23T01:05:00.000Z', attachments: [
                 stageFourAttachmentPayload(id: 'third'),
+                stageFourAttachmentPayload(id: 'fourth'),
+                stageFourAttachmentPayload(id: 'fifth'),
             ]),
         ],
     ]);
@@ -125,6 +129,8 @@ it('sends at most the first two ordered image URLs to AI', function (): void {
         ->and($fake->requests[0]->imageUrls)->toBe([
             'https://download.example.test/first',
             'https://download.example.test/second',
+            'https://download.example.test/third',
+            'https://download.example.test/fourth',
         ]);
 });
 

@@ -18,7 +18,7 @@ class BuildKpusGaHwVisionReviewRequest
         return new VisionReviewRequest(
             developerPrompt: $this->developerPrompt(),
             userPrompt: $this->userPrompt((string) $area['area_name'], $reportDate),
-            imageUrls: $this->firstTwoImageUrls($area),
+            imageUrls: $this->imageUrls($area),
             schema: $this->schema(),
             schemaName: 'kpus_ga_hw_vision_review',
         );
@@ -43,7 +43,8 @@ PROMPT;
     private function userPrompt(string $areaName, CarbonImmutable $reportDate): string
     {
         return sprintf(
-            'Review the first two evidence images for room/area "%s" inside the Hayam Wuruk office/site on report date %s. Check whether one image appears to show area condition, one appears to show the paper checklist, printed timestamp/date seems inconsistent, printed location clearly points to a site other than Hayam Wuruk or is unreadable, image is blurry/unreadable, image is irrelevant to the requested room/area, images appear duplicated, checklist is missing/unreadable, or visible cleanliness may need human review. If the printed location contains Hayam Wuruk, treat that as expected site evidence, not an anomaly by itself.',
+            'Review up to the first %d evidence images for room/area "%s" inside the Hayam Wuruk office/site on report date %s. Check whether at least one image appears to show area condition, at least one appears to show the paper checklist, printed timestamp/date seems inconsistent, printed location clearly points to a site other than Hayam Wuruk or is unreadable, image is blurry/unreadable, image is irrelevant to the requested room/area, images appear duplicated, checklist is missing/unreadable, or visible cleanliness may need human review. If the printed location contains Hayam Wuruk, treat that as expected site evidence, not an anomaly by itself.',
+            $this->maxImages(),
             $areaName,
             $reportDate->toDateString(),
         );
@@ -53,9 +54,9 @@ PROMPT;
      * @param  array<string, mixed>  $area
      * @return list<string>
      */
-    private function firstTwoImageUrls(array $area): array
+    private function imageUrls(array $area): array
     {
-        $images = array_slice($area['images'] ?? [], 0, 2);
+        $images = array_slice($area['images'] ?? [], 0, $this->maxImages());
         $urls = [];
 
         foreach ($images as $image) {
@@ -65,6 +66,11 @@ PROMPT;
         }
 
         return $urls;
+    }
+
+    private function maxImages(): int
+    {
+        return max(1, (int) config('kpus-ga-hw.ai_max_images', 4));
     }
 
     /** @return array<string, mixed> */
