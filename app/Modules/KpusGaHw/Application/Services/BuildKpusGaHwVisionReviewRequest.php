@@ -29,8 +29,10 @@ class BuildKpusGaHwVisionReviewRequest
         return <<<'PROMPT'
 You review KPUS GA HW daily area evidence cautiously.
 Hayam Wuruk is the expected office/site location for all KPUS GA HW areas.
+Lestari Memorial Park is the company/brand name and may appear on paper checklist forms; it is not a different site location by itself.
 Area names such as Tomb, Finance, Pantry, or BD are rooms/areas inside the Hayam Wuruk site.
 Do not mark evidence anomalous merely because the printed location contains Hayam Wuruk.
+Do not mark evidence anomalous merely because a paper form contains Lestari Memorial Park.
 Only flag location when the visible printed location clearly points to another site, clearly does not contain Hayam Wuruk, or cannot be read reliably.
 Return only strict JSON matching the provided schema.
 Allowed result values are ok, anomaly, and uncertain.
@@ -43,7 +45,7 @@ PROMPT;
     private function userPrompt(string $areaName, CarbonImmutable $reportDate): string
     {
         return sprintf(
-            'Review up to the first %d evidence images for room/area "%s" inside the Hayam Wuruk office/site on report date %s. Check whether at least one image appears to show area condition, at least one appears to show the paper checklist, printed timestamp/date seems inconsistent, printed location clearly points to a site other than Hayam Wuruk or is unreadable, image is blurry/unreadable, image is irrelevant to the requested room/area, images appear duplicated, checklist is missing/unreadable, or visible cleanliness may need human review. If the printed location contains Hayam Wuruk, treat that as expected site evidence, not an anomaly by itself.',
+            'Review up to the first %d evidence images for room/area "%s" inside the Hayam Wuruk office/site on report date %s. Check whether at least one image appears to show area condition, at least one appears to show the paper checklist, printed timestamp/date seems inconsistent, printed location clearly points to a site other than Hayam Wuruk or is unreadable, image is blurry/unreadable, image is irrelevant to the requested room/area, images appear duplicated, checklist is missing/unreadable, or visible cleanliness may need human review. If the printed location contains Hayam Wuruk, treat that as expected site evidence, not an anomaly by itself. If a paper form contains Lestari Memorial Park, treat it as the company/form brand, not as a conflicting location.',
             $this->maxImages(),
             $areaName,
             $reportDate->toDateString(),

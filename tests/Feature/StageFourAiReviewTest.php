@@ -144,10 +144,13 @@ it('tells AI that Hayam Wuruk is the expected site and area names are rooms insi
     ], stageFourReportDate());
 
     expect($request->developerPrompt)->toContain('Hayam Wuruk is the expected office/site location')
+        ->and($request->developerPrompt)->toContain('Lestari Memorial Park is the company/brand name')
         ->and($request->developerPrompt)->toContain('Tomb, Finance, Pantry, or BD are rooms/areas')
         ->and($request->developerPrompt)->toContain('Do not mark evidence anomalous merely because the printed location contains Hayam Wuruk')
+        ->and($request->developerPrompt)->toContain('Do not mark evidence anomalous merely because a paper form contains Lestari Memorial Park')
         ->and($request->userPrompt)->toContain('room/area "Tomb" inside the Hayam Wuruk office/site')
-        ->and($request->userPrompt)->toContain('treat that as expected site evidence, not an anomaly by itself');
+        ->and($request->userPrompt)->toContain('treat that as expected site evidence, not an anomaly by itself')
+        ->and($request->userPrompt)->toContain('treat it as the company/form brand, not as a conflicting location');
 });
 
 it('can prepare Basecamp image downloads as data URLs for OpenAI', function (): void {
