@@ -28,11 +28,12 @@ class BuildReadOnlyAuditInput
         $project = $this->basecamp->getProject($accountId, $projectId);
         $todosetDock = $project->enabledTodosetDockItem();
         $todoset = $this->basecamp->getTodoset($todosetDock->url);
+
+        $this->registerProject($accountId, $projectId, $project->name);
+
         $datedListSummary = $this->findDatedList($todoset->todolists, $reportDate);
         $datedList = $this->basecamp->getTodolist($datedListSummary->url);
         $todos = $this->basecamp->listTodos($datedList->todosUrl);
-
-        $this->registerProject($accountId, $projectId, $project->name);
 
         return [
             'project' => [

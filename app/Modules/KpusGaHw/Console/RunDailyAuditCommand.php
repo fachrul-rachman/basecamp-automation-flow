@@ -2,6 +2,7 @@
 
 namespace App\Modules\KpusGaHw\Console;
 
+use App\Modules\KpusGaHw\Application\Exceptions\AuditDateSkippedException;
 use App\Modules\KpusGaHw\Application\Services\DetermineReportDate;
 use App\Modules\KpusGaHw\Application\Services\RunDailyAudit;
 use Carbon\CarbonImmutable;
@@ -17,16 +18,22 @@ class RunDailyAuditCommand extends Command
 
     public function handle(RunDailyAudit $audit, DetermineReportDate $determineReportDate): int
     {
-        $reportDate = $this->reportDate($determineReportDate);
-
         try {
+            $reportDate = $this->reportDate($determineReportDate);
             $summary = $audit->handle($reportDate);
             $this->line(json_encode($summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
             return self::SUCCESS;
+        } catch (AuditDateSkippedException $exception) {
+            $this->line(json_encode([
+                'skipped' => true,
+                'reason' => $exception->getMessage(),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            return self::SUCCESS;
         } catch (Throwable $exception) {
             Log::error('kpus_ga_hw.daily_audit.failed', [
-                'report_date' => $reportDate->toDateString(),
+                'report_date' => isset($reportDate) ? $reportDate->toDateString() : null,
                 'error' => mb_substr($exception->getMessage(), 0, 500),
             ]);
 

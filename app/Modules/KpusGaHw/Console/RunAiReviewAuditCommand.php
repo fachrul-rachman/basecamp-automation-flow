@@ -2,6 +2,7 @@
 
 namespace App\Modules\KpusGaHw\Console;
 
+use App\Modules\KpusGaHw\Application\Exceptions\AuditDateSkippedException;
 use App\Modules\KpusGaHw\Application\Services\DetermineReportDate;
 use App\Modules\KpusGaHw\Application\Services\RunAiReviewAudit;
 use Carbon\CarbonImmutable;
@@ -19,6 +20,13 @@ class RunAiReviewAuditCommand extends Command
         try {
             $summary = $audit->handle($this->reportDate($determineReportDate));
             $this->line(json_encode($summary, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+
+            return self::SUCCESS;
+        } catch (AuditDateSkippedException $exception) {
+            $this->line(json_encode([
+                'skipped' => true,
+                'reason' => $exception->getMessage(),
+            ], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
 
             return self::SUCCESS;
         } catch (Throwable $exception) {

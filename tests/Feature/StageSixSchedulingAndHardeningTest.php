@@ -8,10 +8,13 @@ use App\Core\Shared\Notion\Exceptions\NotionDeliveryException;
 use App\Core\Shared\OpenAI\Contracts\VisionReviewClient;
 use App\Core\Shared\OpenAI\Data\VisionReviewRequest;
 use App\Core\Shared\OpenAI\Data\VisionReviewResponse;
+use App\Core\Shared\Scheduling\Contracts\Clock;
+use App\Core\Shared\Scheduling\Models\Holiday;
 use App\Core\Shared\Support\Contracts\Sleeper;
 use App\Modules\KpusGaHw\Domain\Enums\AuditStatus;
 use App\Modules\KpusGaHw\Domain\Enums\NotionDeliveryStatus;
 use App\Modules\KpusGaHw\Models\DailyAreaAudit;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Http;
@@ -112,6 +115,54 @@ it('does not create false business results when Basecamp is unavailable', functi
     expect(DailyAreaAudit::query()->count())->toBe(0);
 });
 
+it('skips the default daily audit on weekends and configured holidays', function (): void {
+    app()->instance(Clock::class, new class implements Clock
+    {
+        public function now(): CarbonImmutable
+        {
+            return CarbonImmutable::parse('2026-06-20 09:00:00', 'Asia/Jakarta');
+        }
+    });
+
+    expect(Artisan::call('kpus-ga-hw:daily-audit'))->toBe(0);
+
+    app()->instance(Clock::class, new class implements Clock
+    {
+        public function now(): CarbonImmutable
+        {
+            return CarbonImmutable::parse('2026-06-23 09:00:00', 'Asia/Jakarta');
+        }
+    });
+    Holiday::factory()->create(['holiday_date' => '2026-06-23']);
+
+    expect(Artisan::call('kpus-ga-hw:daily-audit'))->toBe(0);
+
+    expect(DailyAreaAudit::query()->count())->toBe(0);
+});
+
+it('publishes a Bermasalah finding when the daily dated to-do list is missing', function (): void {
+    fakeStageSixMissingDatedListResponses();
+    fakeStageSixVision([]);
+    $notion = fakeStageSixNotion([new NotionCreatePageResponse(pageId: 'page-missing-list')]);
+    fakeStageSixSleeper();
+
+    $this->artisan('kpus-ga-hw:daily-audit --report-date=2026-06-23')
+        ->assertExitCode(0);
+
+    $audit = DailyAreaAudit::query()->firstOrFail();
+    $properties = $notion->requests[0]->toPayload()['properties'];
+
+    expect($audit->area_identity)->toBe('missing-dated-list:2026-06-23')
+        ->and($audit->area_name)->toBe('Todo List Harian')
+        ->and($audit->status)->toBe(AuditStatus::Bermasalah)
+        ->and($audit->reason)->toBe('To-do list belum dibuat sebelum jam pengecekan')
+        ->and($audit->basecamp_todo_url)->toBe('https://app.basecamp.com/4888518/projects/47333489')
+        ->and($audit->notion_delivery_status)->toBe(NotionDeliveryStatus::Delivered)
+        ->and($properties['Status']['status']['name'])->toBe('Bermasalah')
+        ->and($properties['Validator Status']['status']['name'])->toBe('Uncheck')
+        ->and($properties['Bukti']['url'])->toBe('https://app.basecamp.com/4888518/projects/47333489');
+});
+
 it('registers the daily scheduler at 09:00 Asia/Jakarta', function (): void {
     Artisan::call('schedule:list');
     $output = Artisan::output();
@@ -152,6 +203,33 @@ function fakeStageSixBasecampResponses(array $todos, array $commentsByTodo): voi
     Http::fake($responses);
 }
 
+function fakeStageSixMissingDatedListResponses(): void
+{
+    BasecampProject::query()->updateOrCreate(
+        [
+            'basecamp_account_id' => '4888518',
+            'basecamp_project_id' => '47333489',
+        ],
+        [
+            'name' => 'KPUS GA HW',
+            'workflow_type' => 'kpus_ga_hw',
+            'active' => true,
+        ],
+    );
+
+    Http::fake([
+        'https://3.basecampapi.com/4888518/projects/47333489.json' => Http::response(stageSixProjectPayload()),
+        'https://3.basecampapi.com/4888518/buckets/47333489/todosets/9905161959.json' => Http::response(stageSixTodosetPayload([
+            [
+                'id' => 2000,
+                'title' => 'MASTER (JANGAN DIGANTI)',
+                'url' => 'https://3.basecampapi.com/4888518/buckets/47333489/todolists/2000.json',
+                'app_url' => 'https://app.basecamp.com/4888518/buckets/47333489/todolists/2000',
+            ],
+        ])),
+    ]);
+}
+
 /** @return list<array<string, mixed>> */
 function stageSixPassingComments(int $todoId): array
 {
@@ -183,7 +261,7 @@ function stageSixProjectPayload(): array
 }
 
 /** @return array<string, mixed> */
-function stageSixTodosetPayload(): array
+function stageSixTodosetPayload(?array $todolists = null): array
 {
     return [
         'id' => 9905161959,
@@ -193,7 +271,7 @@ function stageSixTodosetPayload(): array
             'name' => 'KPUS GA HW',
             'type' => 'Project',
         ],
-        'todolists' => [[
+        'todolists' => $todolists ?? [[
             'id' => 10018362569,
             'title' => '23-06-2026',
             'url' => 'https://3.basecampapi.com/4888518/buckets/47333489/todolists/10018362569.json',

@@ -3,7 +3,7 @@
 use App\Core\Shared\Basecamp\Models\BasecampProject;
 use App\Core\Shared\Scheduling\Contracts\Clock;
 use App\Core\Shared\Scheduling\Models\Holiday;
-use App\Modules\KpusGaHw\Application\Exceptions\DatedTodolistNotFoundException;
+use App\Modules\KpusGaHw\Application\Exceptions\AuditDateSkippedException;
 use App\Modules\KpusGaHw\Application\Services\DetermineReportDate;
 use App\Modules\KpusGaHw\Application\Services\EvaluateObjectiveRules;
 use App\Modules\KpusGaHw\Application\Services\RunObjectiveAudit;
@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Http;
 
 uses(RefreshDatabase::class);
 
-it('calculates the latest previous business day', function (): void {
+it('calculates the current business day and skips weekends or configured holidays', function (): void {
     $clock = new class implements Clock
     {
         public function now(): CarbonImmutable
@@ -26,12 +26,15 @@ it('calculates the latest previous business day', function (): void {
 
     app()->instance(Clock::class, $clock);
 
-    expect(app(DetermineReportDate::class)->handle()->toDateString())->toBe('2026-06-22')
-        ->and(app(DetermineReportDate::class)->handle(CarbonImmutable::parse('2026-06-22', 'Asia/Jakarta'))->toDateString())->toBe('2026-06-19');
+    expect(app(DetermineReportDate::class)->handle()->toDateString())->toBe('2026-06-23');
 
-    Holiday::factory()->create(['holiday_date' => '2026-06-22']);
+    expect(fn () => app(DetermineReportDate::class)->handle(CarbonImmutable::parse('2026-06-20', 'Asia/Jakarta')))
+        ->toThrow(AuditDateSkippedException::class, 'weekend');
 
-    expect(app(DetermineReportDate::class)->handle(CarbonImmutable::parse('2026-06-23', 'Asia/Jakarta'))->toDateString())->toBe('2026-06-19');
+    Holiday::factory()->create(['holiday_date' => '2026-06-23']);
+
+    expect(fn () => app(DetermineReportDate::class)->handle(CarbonImmutable::parse('2026-06-23', 'Asia/Jakarta')))
+        ->toThrow(AuditDateSkippedException::class, 'configured holiday');
 });
 
 it('passes objective check for two images uploaded before or exactly at 09:00 and before 06:00', function (string $uploadedAt): void {
@@ -135,12 +138,25 @@ it('does not duplicate finalized objective failures on rerun', function (): void
         ->and(DailyAreaAudit::query()->count())->toBe(1);
 });
 
-it('fails at run level when the dated list is missing', function (): void {
+it('persists a Bermasalah finding when the dated list is missing before check time', function (): void {
     fakeStageThreeBasecampResponses([], []);
 
-    expect(fn () => app(RunObjectiveAudit::class)->handle(stageThreeReportDate()))
-        ->toThrow(DatedTodolistNotFoundException::class)
-        ->and(DailyAreaAudit::query()->count())->toBe(0);
+    $summary = app(RunObjectiveAudit::class)->handle(stageThreeReportDate());
+
+    expect($summary['areas_checked'])->toBe(0)
+        ->and($summary['objective_failed'])->toBe(1)
+        ->and($summary['failures_persisted'])->toBe(1)
+        ->and($summary['missing_dated_todolist'])->toBeTrue()
+        ->and(DailyAreaAudit::query()->count())->toBe(1);
+
+    $audit = DailyAreaAudit::query()->firstOrFail();
+
+    expect($audit->area_identity)->toBe('missing-dated-list:2026-06-23')
+        ->and($audit->area_name)->toBe('Todo List Harian')
+        ->and($audit->basecamp_todo_id)->toBe('missing-dated-list:2026-06-23')
+        ->and($audit->basecamp_todo_url)->toBe('https://app.basecamp.com/4888518/projects/47333489')
+        ->and($audit->status)->toBe(AuditStatus::Bermasalah)
+        ->and($audit->reason)->toBe('To-do list belum dibuat sebelum jam pengecekan');
 });
 
 it('runs objective audit through Artisan command', function (): void {

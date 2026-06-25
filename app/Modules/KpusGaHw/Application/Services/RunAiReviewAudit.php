@@ -4,6 +4,7 @@ namespace App\Modules\KpusGaHw\Application\Services;
 
 use App\Core\Shared\Basecamp\Models\BasecampProject;
 use App\Core\Shared\OpenAI\Contracts\VisionReviewClient;
+use App\Modules\KpusGaHw\Application\Exceptions\DatedTodolistNotFoundException;
 use Carbon\CarbonImmutable;
 
 class RunAiReviewAudit
@@ -12,6 +13,7 @@ class RunAiReviewAudit
         private readonly BuildReadOnlyAuditInput $inputBuilder,
         private readonly EvaluateObjectiveRules $objectiveRules,
         private readonly PersistObjectiveFailure $persistObjectiveFailure,
+        private readonly PersistMissingDatedListFailure $persistMissingDatedListFailure,
         private readonly BuildKpusGaHwVisionReviewRequest $requestBuilder,
         private readonly VisionReviewClient $visionReview,
         private readonly ResolveAiAuditResult $resultResolver,
@@ -21,11 +23,9 @@ class RunAiReviewAudit
     /** @return array<string, mixed> */
     public function handle(CarbonImmutable $reportDate): array
     {
-        $input = $this->inputBuilder->handle($reportDate);
-        $project = $this->project();
         $summary = [
             'report_date' => $reportDate->toDateString(),
-            'areas_checked' => count($input['areas']),
+            'areas_checked' => 0,
             'objective_failed' => 0,
             'ai_reviewed' => 0,
             'baik' => 0,
@@ -33,6 +33,21 @@ class RunAiReviewAudit
             'bermasalah' => 0,
             'persisted' => 0,
         ];
+
+        try {
+            $input = $this->inputBuilder->handle($reportDate);
+            $summary['areas_checked'] = count($input['areas']);
+        } catch (DatedTodolistNotFoundException) {
+            $audit = $this->persistMissingDatedListFailure->handle($this->project(), $reportDate);
+            $summary['objective_failed'] = 1;
+            $summary['bermasalah'] = 1;
+            $summary['persisted'] = $audit->wasRecentlyCreated ? 1 : 0;
+            $summary['missing_dated_todolist'] = true;
+
+            return $summary;
+        }
+
+        $project = $this->project();
 
         foreach ($input['areas'] as $area) {
             $objectiveResult = $this->objectiveRules->handle($area, $reportDate);

@@ -3,6 +3,7 @@
 namespace App\Modules\KpusGaHw\Application\Services;
 
 use App\Core\Shared\Basecamp\Models\BasecampProject;
+use App\Modules\KpusGaHw\Application\Exceptions\DatedTodolistNotFoundException;
 use Carbon\CarbonImmutable;
 
 class RunObjectiveAudit
@@ -11,16 +12,33 @@ class RunObjectiveAudit
         private readonly BuildReadOnlyAuditInput $inputBuilder,
         private readonly EvaluateObjectiveRules $evaluator,
         private readonly PersistObjectiveFailure $persistObjectiveFailure,
+        private readonly PersistMissingDatedListFailure $persistMissingDatedListFailure,
     ) {}
 
     /** @return array<string, mixed> */
     public function handle(CarbonImmutable $reportDate): array
     {
-        $input = $this->inputBuilder->handle($reportDate);
-        $project = $this->project();
         $failed = 0;
         $passed = 0;
         $persisted = 0;
+
+        try {
+            $input = $this->inputBuilder->handle($reportDate);
+        } catch (DatedTodolistNotFoundException) {
+            $project = $this->project();
+            $audit = $this->persistMissingDatedListFailure->handle($project, $reportDate);
+
+            return [
+                'report_date' => $reportDate->toDateString(),
+                'areas_checked' => 0,
+                'objective_passed' => 0,
+                'objective_failed' => 1,
+                'failures_persisted' => $audit->wasRecentlyCreated ? 1 : 0,
+                'missing_dated_todolist' => true,
+            ];
+        }
+
+        $project = $this->project();
 
         foreach ($input['areas'] as $area) {
             $result = $this->evaluator->handle($area, $reportDate);

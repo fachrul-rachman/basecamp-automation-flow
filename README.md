@@ -96,7 +96,7 @@ Run the full daily process manually:
 php artisan kpus-ga-hw:daily-audit --report-date=2026-06-23
 ```
 
-Run the full process for the latest previous business day:
+Run the full process for the current business day. Weekend and configured holiday runs are skipped:
 
 ```bash
 php artisan kpus-ga-hw:daily-audit
